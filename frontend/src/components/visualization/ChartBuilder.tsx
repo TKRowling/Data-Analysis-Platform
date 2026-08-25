@@ -6,7 +6,7 @@ import { createChart } from '../../services/visualizationApi';
 import type { ChartRequest, PlotlyFigure } from '../../types/chart';
 import type { ColumnProfile, Dataset } from '../../types/dataset';
 
-const INITIAL: ChartRequest = { chart_type: 'bar', x: null, y: null, aggregation: 'sum', color: null, title: null };
+const INITIAL: ChartRequest = { chart_type: 'line', x: null, y: null, y_columns: [], columns: [], aggregation: 'none', color: null, title: null };
 
 export function ChartBuilder({ dataset, columns }: { dataset: Dataset; columns: ColumnProfile[] }) {
   const [request, setRequest] = useState<ChartRequest>(INITIAL);
@@ -30,7 +30,7 @@ export function ChartBuilder({ dataset, columns }: { dataset: Dataset; columns: 
   return (
     <>
       <ErrorBanner message={error} onDismiss={() => setError('')} />
-      <div className="builder">
+      <div className="visualization-workspace">
         <ChartControls request={request} columns={columns} onChange={setRequest}
                        onGenerate={generate} busy={busy} />
         <ChartPreview figure={figure} loading={busy} />

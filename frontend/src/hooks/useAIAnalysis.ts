@@ -33,11 +33,13 @@ export function useAIAnalysis(datasetId: string | undefined): UseAIAnalysis {
   const ask = useCallback(
     async (question: string) => {
       if (!datasetId || !question.trim()) return;
+      // A new question starts a clean result workspace immediately.
+      setHistory([]);
       setBusy(true);
       setError('');
       try {
         const result = await askQuestion(datasetId, question.trim());
-        setHistory((items) => [...items, { ...result, question: question.trim() }]);
+        setHistory([{ ...result, question: question.trim() }]);
       } catch (cause) {
         setError((cause as Error).message);
       } finally {

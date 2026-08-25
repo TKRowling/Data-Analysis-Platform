@@ -1,13 +1,10 @@
-import { Table2 } from 'lucide-react';
+import { MoreVertical, Table2 } from 'lucide-react';
 import type { Dataset } from '../../types/dataset';
 
 export function Header({ title, dataset }: { title: string; dataset: Dataset | null }) {
   return (
     <header>
-      <div>
-        <small>WORKSPACE</small>
-        <h2>{title}</h2>
-      </div>
+      <span className="header-module">{title}</span>
       {dataset ? (
         <div className="dataset-pill">
           <Table2 size={17} />
@@ -19,6 +16,8 @@ export function Header({ title, dataset }: { title: string; dataset: Dataset | n
       ) : (
         <div className="dataset-pill muted">No dataset loaded</div>
       )}
+      <button className="deploy-button">Deploy</button>
+      <MoreVertical size={18} className="more-menu" />
     </header>
   );
 }

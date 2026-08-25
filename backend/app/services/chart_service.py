@@ -19,29 +19,32 @@ def _aggregate(frame, request: ChartRequest):
         raise AnalysisError("X axis is required for aggregation")
     if request.aggregation == "count":
         return frame.groupby(request.x, dropna=False).size().reset_index(name="count"), "count"
-    if not request.y:
+    metrics = request.y_columns or ([request.y] if request.y else [])
+    if not metrics:
         raise AnalysisError(f"Y axis is required to aggregate with '{request.aggregation}'")
-    grouped = frame.groupby(request.x, dropna=False)[request.y].agg(request.aggregation).reset_index()
-    return grouped, request.y
+    grouped = frame.groupby(request.x, dropna=False)[metrics].agg(request.aggregation).reset_index()
+    return grouped, metrics if len(metrics) > 1 else metrics[0]
 
 
 def create_chart(record, request: ChartRequest) -> dict:
     frame = record.frame.copy()
-    for col in (request.x, request.y, request.color):
+    for col in (request.x, request.y, request.color, *request.y_columns, *request.columns):
         if col and col not in frame:
             raise AnalysisError(f"Unknown column: {col}")
 
     if request.chart_type != "heatmap":
         if request.chart_type in NEEDS_X and not request.x:
             raise AnalysisError(f"A {request.chart_type} chart needs an X axis column")
-        if request.aggregation == "none" and request.chart_type in NEEDS_Y and not request.y:
+        if request.aggregation == "none" and request.chart_type in NEEDS_Y and not (request.y or request.y_columns):
             raise AnalysisError(f"A {request.chart_type} chart needs a Y axis column")
 
     if request.aggregation != "none" and request.chart_type != "heatmap":
         frame, y = _aggregate(frame, request)
         color = request.color if request.color in frame.columns else None
     else:
-        y, color = request.y, request.color
+        selected_y = request.y_columns or ([request.y] if request.y else [])
+        y = selected_y if len(selected_y) > 1 else (selected_y[0] if selected_y else None)
+        color = request.color
 
     if request.chart_type == "pie" and not y:
         raise AnalysisError("A pie chart needs a numeric Y column for slice sizes, or an aggregation such as 'count'")
@@ -53,7 +56,7 @@ def create_chart(record, request: ChartRequest) -> dict:
         "histogram": lambda: histogram(frame, x=request.x, color=color, title=request.title),
         "box": lambda: box_plot(frame, x=request.x, y=y, color=color, title=request.title),
         "pie": lambda: pie_chart(frame, names=request.x, values=y, title=request.title),
-        "heatmap": lambda: heatmap(frame, title=request.title or "Correlation heatmap"),
+        "heatmap": lambda: heatmap(frame[request.columns] if request.columns else frame, title=request.title or "Correlation heatmap"),
     }
     if request.chart_type not in builders:
         raise AnalysisError(f"Unsupported chart type: {request.chart_type}")

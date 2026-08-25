@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Field } from '../common';
+import { Field } from '../common';
 import type { DatabaseConfig } from '../../types/dataset';
 
 const DEFAULT: DatabaseConfig = {
@@ -28,7 +28,7 @@ export function DatabaseForm({ onConnect, busy }: { onConnect: (config: Database
   const incomplete = !config.host || !config.database || !config.username || !config.query.trim();
 
   return (
-    <Card title="Database connection" sub="Credentials are used for this request only and are never stored.">
+    <div className="database-form">
       <div className="controls">
         <Field label="Type">
           <select value={config.database_type}
@@ -54,6 +54,6 @@ export function DatabaseForm({ onConnect, busy }: { onConnect: (config: Database
       <button className="primary" onClick={() => onConnect(config)} disabled={busy || incomplete}>
         {busy ? 'Connecting…' : 'Connect and load'}
       </button>
-    </Card>
+    </div>
   );
 }

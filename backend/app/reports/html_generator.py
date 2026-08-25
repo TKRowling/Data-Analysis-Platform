@@ -74,5 +74,5 @@ def render(title: str, sections: list[Section]) -> str:
             f"<title>{escape(title)}</title><style>{STYLE}</style></head><body>"
             f"<h1>{escape(title)}</h1><p class='stamp'>Generated {timestamp()}</p>"
             f"{''.join(blocks)}"
-            f"<footer>Produced by Datum. Every figure was computed from the source dataset.</footer>"
+            f"<footer>Produced by Data Analytics Platform. Every figure was computed from the source dataset.</footer>"
             f"</body></html>")

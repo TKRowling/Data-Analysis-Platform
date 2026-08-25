@@ -1,6 +1,6 @@
-# Datum — Data Analysis Platform
+# Data Analytics Platform
 
-Datum is a full-stack analytics workspace for a data science team. One loaded dataset stays active across data profiling, deterministic EDA, a multi-agent AI analyst, interactive charts, feature engineering, and report export.
+Data Analytics Platform is a full-stack analytics workspace for a data science team. One loaded dataset stays active across data profiling, deterministic EDA, a multi-agent AI analyst, interactive charts, feature engineering, and report export.
 
 ## The five modules
 

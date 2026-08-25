@@ -22,7 +22,7 @@ function NumericView({ data }: { data: NumericDistribution }) {
         <Metric label="SKEWNESS" value={formatNumber(data.statistics.skewness, 3)}
                 note={`${data.outliers.count} IQR outliers`} />
       </div>
-      <div className="two">
+      <div className="two distribution-plots">
         <Card title="Histogram" sub={`${data.statistics.count.toLocaleString()} non-null values`}>
           <Plot
             data={[{
@@ -31,7 +31,7 @@ function NumericView({ data }: { data: NumericDistribution }) {
               hovertemplate: 'value %{x}<br>count %{y}<extra></extra>',
             } as never]}
             layout={{ height: 340, autosize: true, bargap: 0.02, margin: { l: 55, r: 20, t: 16, b: 44 } }}
-            config={PLOT_CONFIG} useResizeHandler style={{ width: '100%' }}
+            config={PLOT_CONFIG} useResizeHandler className="distribution-plot" style={{ width: '100%', height: '340px' }}
           />
         </Card>
         <Card title="Box plot" sub="Quartiles, whiskers, and spread">
@@ -43,7 +43,7 @@ function NumericView({ data }: { data: NumericDistribution }) {
               marker: { color: '#3859d9' }, boxpoints: false,
             } as never]}
             layout={{ height: 340, autosize: true, showlegend: false, margin: { l: 55, r: 20, t: 16, b: 44 } }}
-            config={PLOT_CONFIG} useResizeHandler style={{ width: '100%' }}
+            config={PLOT_CONFIG} useResizeHandler className="distribution-plot" style={{ width: '100%', height: '340px' }}
           />
           <div className="quartiles">
             {(['min', 'q1', 'median', 'q3', 'max'] as const).map((key) => (
@@ -71,7 +71,7 @@ function CategoricalView({ data }: { data: CategoricalDistribution }) {
         <Metric label="MOST FREQUENT" value={data.values[0]?.label ?? '—'}
                 note={data.values[0] ? `${(data.values[0].proportion * 100).toFixed(1)}% of rows` : undefined} />
       </div>
-      <div className="two">
+      <div className="two distribution-plots">
         <Card title="Category counts" sub="Frequency of each value">
           <Plot
             data={[{
@@ -81,7 +81,7 @@ function CategoricalView({ data }: { data: CategoricalDistribution }) {
             } as never]}
             layout={{ height: 360, autosize: true, margin: { l: 55, r: 20, t: 16, b: 96 },
                       xaxis: { tickangle: -35 } }}
-            config={PLOT_CONFIG} useResizeHandler style={{ width: '100%' }}
+            config={PLOT_CONFIG} useResizeHandler className="distribution-plot" style={{ width: '100%', height: '360px' }}
           />
         </Card>
         <Card title="Proportion" sub="Share of rows per category">
@@ -93,7 +93,7 @@ function CategoricalView({ data }: { data: CategoricalDistribution }) {
             } as never]}
             layout={{ height: 360, autosize: true, margin: { l: 20, r: 20, t: 16, b: 20 },
                       legend: { orientation: 'v', x: 1, y: 0.5 } }}
-            config={PLOT_CONFIG} useResizeHandler style={{ width: '100%' }}
+            config={PLOT_CONFIG} useResizeHandler className="distribution-plot" style={{ width: '100%', height: '360px' }}
           />
         </Card>
       </div>

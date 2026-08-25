@@ -1,6 +1,6 @@
 # System Overview
 
-A complete walkthrough of what Datum is, how it is built, and what powers each part.
+A complete walkthrough of what Data Analytics Platform is, how it is built, and what powers each part.
 
 For narrower topics see [architecture.md](architecture.md) (dependency rules), [agents.md](agents.md) (the AI pipeline), [api.md](api.md) (endpoints), and [database.md](database.md) (SQL sources).
 
@@ -8,7 +8,7 @@ For narrower topics see [architecture.md](architecture.md) (dependency rules), [
 
 ## 1. What this is
 
-Datum is a data analysis workspace for a data science team. You load one dataset and it stays active across every module: profile it, run statistical analysis, ask questions in plain English, build charts, engineer features, and export a report.
+Data Analytics Platform is a data analysis workspace for a data science team. You load one dataset and it stays active across every module: profile it, run statistical analysis, ask questions in plain English, build charts, engineer features, and export a report.
 
 It runs as a **modular monolith** — one FastAPI backend, one React frontend, no message queues or microservices. That is deliberate: the whole thing starts with two commands and a new developer can read the entire backend in an afternoon.
 

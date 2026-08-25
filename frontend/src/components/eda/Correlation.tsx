@@ -16,7 +16,7 @@ export function Correlation({ data, method, onMethodChange }: {
   const size = Math.max(420, Math.min(data.columns.length * 46 + 160, 760));
 
   return (
-    <div className="two">
+    <div className="two correlation-layout">
       <Card
         title="Correlation matrix"
         sub={`${data.columns.length} numeric columns · ${method} coefficient`}
@@ -37,7 +37,8 @@ export function Correlation({ data, method, onMethodChange }: {
           layout={{ autosize: true, height: size, margin: { l: 110, r: 30, t: 12, b: 110 } }}
           config={{ displayModeBar: false, responsive: true }}
           useResizeHandler
-          style={{ width: '100%' }}
+          className="correlation-plot"
+          style={{ width: '100%', height: `${size}px` }}
         />
       </Card>
 

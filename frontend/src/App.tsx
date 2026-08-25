@@ -21,7 +21,7 @@ export default function App() {
       {module === 'source' && <DataSourcePage onLoaded={() => setModule('eda')} />}
       {module === 'eda' && <ExploratoryAnalysisPage dataset={dataset} revision={revision} />}
       {module === 'ai' && (
-        <AIAnalysisPage dataset={dataset} history={ai.history} status={ai.status}
+        <AIAnalysisPage dataset={dataset} history={ai.history}
                         busy={ai.busy} error={ai.error} onAsk={ai.ask} />
       )}
       {module === 'visualize' && <VisualizationPage dataset={dataset} revision={revision} />}

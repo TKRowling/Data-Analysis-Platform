@@ -7,8 +7,8 @@ export function ReportsPage({ dataset, insights }: { dataset: Dataset | null; in
   if (!dataset) return <Empty />;
   return (
     <>
-      <Title eyebrow="REPORT BUILDER" title="Package the analysis"
-             text="Select the evidence your audience needs and export it as HTML, PDF, or Markdown." />
+      <Title eyebrow="AUTOMATED REPORTING" title="Automated Reports"
+             text="Generate a comprehensive analysis report from your dataset, verified insights, and selected analytical sections." />
       <ReportBuilder dataset={dataset} insights={insights} />
     </>
   );

@@ -14,8 +14,8 @@ export function VisualizationPage({ dataset, revision }: { dataset: Dataset | nu
 
   return (
     <>
-      <Title eyebrow="CHART STUDIO" title="Build a view that tells the story"
-             text="Choose fields, aggregations, and a visual form. Every chart stays interactive." />
+      <Title eyebrow="AUTOMATED VISUALIZATION" title="Interactive Visualizations"
+             text="Select a chart, map your dataset columns, and generate an interactive analysis-ready visual." />
       <ChartBuilder dataset={dataset} columns={columns} />
     </>
   );

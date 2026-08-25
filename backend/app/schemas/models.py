@@ -28,6 +28,8 @@ class ChartRequest(BaseModel):
     chart_type: Literal["bar", "line", "scatter", "histogram", "box", "pie", "heatmap"]
     x: str | None = None
     y: str | None = None
+    y_columns: list[str] = []
+    columns: list[str] = []
     aggregation: Literal["none", "sum", "mean", "count", "min", "max"] = "none"
     color: str | None = None
     title: str | None = None

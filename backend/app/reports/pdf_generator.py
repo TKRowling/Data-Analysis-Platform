@@ -109,7 +109,7 @@ def _footer(canvas, document):
     canvas.saveState()
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(MUTED)
-    canvas.drawString(18 * mm, 12 * mm, "Produced by Datum — every figure computed from the source dataset.")
+    canvas.drawString(18 * mm, 12 * mm, "Produced by Data Analytics Platform — every figure computed from the source dataset.")
     canvas.drawRightString(A4[0] - 18 * mm, 12 * mm, f"Page {document.page}")
     canvas.restoreState()
 
@@ -117,7 +117,7 @@ def _footer(canvas, document):
 def render(title: str, sections: list[Section]) -> bytes:
     styles = _styles()
     buffer = io.BytesIO()
-    document = SimpleDocTemplate(buffer, pagesize=A4, title=title, author="Datum",
+    document = SimpleDocTemplate(buffer, pagesize=A4, title=title, author="Data Analytics Platform",
                                  leftMargin=18 * mm, rightMargin=18 * mm,
                                  topMargin=18 * mm, bottomMargin=20 * mm)
     story: list = [Paragraph(_escape(title), styles["title"]),

@@ -39,7 +39,7 @@ export function Statistics({ data }: { data: StatisticsData }) {
                   }}
                   config={PLOT_CONFIG}
                   useResizeHandler
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', height: '190px' }}
                 />
               </div>
             ))}

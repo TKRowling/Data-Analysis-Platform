@@ -5,6 +5,8 @@ export interface ChartRequest {
   chart_type: ChartType;
   x?: string | null;
   y?: string | null;
+  y_columns?: string[];
+  columns?: string[];
   aggregation: Aggregation;
   color?: string | null;
   title?: string | null;

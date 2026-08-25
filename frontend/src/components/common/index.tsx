@@ -5,9 +5,12 @@ import { formatCell, humanize } from '../../utils/formatters';
 export function Title({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return (
     <div className="page-title">
-      <span className="eyebrow">{eyebrow}</span>
-      <h1>{title}</h1>
-      <p>{text}</p>
+      <span className="title-accent" aria-hidden="true" />
+      <div className="title-copy">
+        <span className="eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{text}</p>
+      </div>
     </div>
   );
 }
@@ -61,7 +64,11 @@ export function DataTable({ rows, limit = 100, empty = 'No results.' }: { rows: 
         <tbody>
           {rows.slice(0, limit).map((row, index) => (
             <tr key={index}>
-              {columns.map((c) => <td key={c}>{formatCell(row[c])}</td>)}
+              {columns.map((c) => {
+                const value = row[c];
+                const numeric = typeof value === 'number';
+                return <td key={c} className={numeric ? 'numeric-cell' : undefined}>{formatCell(value)}</td>;
+              })}
             </tr>
           ))}
         </tbody>
