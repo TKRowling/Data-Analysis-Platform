@@ -22,9 +22,11 @@ export interface AIExchange extends AIResult {
 }
 
 export interface LLMStatus {
+  /** "ollama" (official) or "cloudflare" (testing). */
   provider: string;
   model?: string;
-  base_url?: string;
+  /** Where requests go. Never contains an API token. */
+  endpoint?: string;
   available: boolean;
   mode: 'hybrid' | 'deterministic';
   detail: string;

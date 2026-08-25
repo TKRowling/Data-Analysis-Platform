@@ -20,7 +20,11 @@ def _bool(name: str, default: bool) -> bool:
 class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
     frontend_origin: str = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+
+    # LLM_PROVIDER picks one provider: "ollama" (official) or "cloudflare" (testing).
     llm_provider: str = os.getenv("LLM_PROVIDER", "ollama")
+
+    # Ollama — runs locally
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     ollama_timeout_seconds: float = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
@@ -28,6 +32,14 @@ class Settings:
     ollama_num_ctx: int = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
     ollama_keep_alive: str = os.getenv("OLLAMA_KEEP_ALIVE", "5m")
     ollama_stream: bool = _bool("OLLAMA_STREAM", False)
+
+    # Cloudflare Workers AI — hosted, used for testing
+    cloudflare_account_id: str = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+    cloudflare_api_token: str = os.getenv("CLOUDFLARE_API_TOKEN", "")
+    cloudflare_model: str = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.1-8b-instruct")
+    cloudflare_timeout_seconds: float = float(os.getenv("CLOUDFLARE_TIMEOUT_SECONDS", "60"))
+    cloudflare_temperature: float = float(os.getenv("CLOUDFLARE_TEMPERATURE", "0.1"))
+    cloudflare_max_tokens: int = int(os.getenv("CLOUDFLARE_MAX_TOKENS", "1024"))
 
 
 settings = Settings()

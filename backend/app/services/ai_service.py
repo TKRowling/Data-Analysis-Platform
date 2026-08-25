@@ -38,17 +38,36 @@ def analyze(record, question: str) -> dict:
     return result.to_dict()
 
 
+DETERMINISTIC_NOTE = ("Questions are routed by keyword and answers use deterministic "
+                      "explanations — every figure is still computed.")
+
+SUPPORTED_PROVIDERS = {"ollama", "cloudflare"}
+
+
 def llm_status() -> dict:
-    """Whether agent narration and LLM routing are currently available."""
+    """Whether agent narration and LLM routing are currently available.
+
+    Never includes the API token: this response is served to the browser.
+    """
     client = _client()
     if client is None:
         return {"provider": settings.llm_provider, "available": False, "mode": "deterministic",
-                "detail": "No language model is configured. Questions are routed by keyword."}
-    available = client.health()
-    return {"provider": settings.llm_provider, "model": settings.ollama_model,
-            "base_url": settings.ollama_base_url, "available": available,
-            "mode": "hybrid" if available else "deterministic",
-            "detail": ("The language model routes questions and explains verified results."
-                       if available else
-                       f"Cannot reach Ollama at {settings.ollama_base_url}. Questions are routed by keyword "
-                       "and answers use deterministic explanations — every figure is still computed.")}
+                "detail": f"No language model is configured. {DETERMINISTIC_NOTE}"}
+
+    base = {"provider": client.provider, "model": client.model, "endpoint": client.endpoint,
+            "available": False, "mode": "deterministic"}
+
+    if client.provider not in SUPPORTED_PROVIDERS:
+        return {**base, "detail": f"Unsupported LLM_PROVIDER {settings.llm_provider!r}. "
+                                  f"Use 'ollama' or 'cloudflare'. {DETERMINISTIC_NOTE}"}
+
+    missing = client.missing_config()
+    if missing:
+        return {**base, "detail": f"{client.provider} is selected but {missing} is not set. {DETERMINISTIC_NOTE}"}
+
+    if client.health():
+        return {**base, "available": True, "mode": "hybrid",
+                "detail": f"The {client.provider} model {client.model} routes questions "
+                          "and explains verified results."}
+
+    return {**base, "detail": f"Cannot reach {client.provider} at {client.endpoint}. {DETERMINISTIC_NOTE}"}

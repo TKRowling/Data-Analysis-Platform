@@ -95,3 +95,6 @@
 
 @media(max-width:1100px){.ai-grid{grid-template-columns:1fr}.agent-status{position:static}}
 @media(max-width:900px){.quartiles{grid-template-columns:repeat(3,1fr)}.mini-charts{grid-template-columns:1fr}}
+.provider-info{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0 0 16px;font-size:11px}
+.provider-info dt{color:#8992a7;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:9px;align-self:center}
+.provider-info dd{margin:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

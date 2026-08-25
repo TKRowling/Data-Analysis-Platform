@@ -26,7 +26,9 @@ Datum is a full-stack analytics workspace for a data science team. One loaded da
 
 The orchestrator sends the model your question and the column names — never row values — and asks for a routing plan. That plan is validated against the real dataframe before anything runs: a column the model invented is discarded. A specialist then computes the answer in pandas, and the insight agent is given the finished numbers to phrase. If it states a figure that is not in the verified result, its wording is thrown away and the deterministic sentence stands.
 
-**Ollama is optional.** With it stopped, questions route through a keyword classifier and answers use deterministic explanations. Every number is still computed and still marked `verified`. `GET /api/ai/health` reports which mode is live, and the UI says so plainly.
+**Two providers, picked by `LLM_PROVIDER`:** `ollama` runs locally and is the official service; `cloudflare` uses Cloudflare Workers AI and is there for testing. One is active at a time — there is no automatic failover between them.
+
+**Both are optional.** With neither reachable, questions route through a keyword classifier and answers use deterministic explanations. Every number is still computed and still marked `verified`. `GET /api/ai/health` reports which mode is live, and the UI says so plainly.
 
 ## Run locally
 
@@ -50,7 +52,7 @@ npm.cmd run dev
 
 Open http://localhost:5173 and upload [sample-data/sales.csv](sample-data/sales.csv) — 263 rows with deliberate missing values, duplicates, outliers, and a strong age/income correlation, so every tab has something to show. The API is at http://localhost:8000/docs.
 
-For the AI agents, copy `.env.example` to `.env` (and `backend/.env.example` to `backend/.env` when running the backend directly), then set `OLLAMA_MODEL` to a model you have pulled. With Docker Desktop use `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
+For the AI agents, copy `.env.example` to `.env` (and `backend/.env.example` to `backend/.env` when running the backend directly). For Ollama, set `OLLAMA_MODEL` to a model you have pulled; with Docker Desktop use `OLLAMA_BASE_URL=http://host.docker.internal:11434`. To test against Cloudflare instead, set `LLM_PROVIDER=cloudflare` and fill in `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 
 Alternatively `docker compose up --build`, then open http://localhost:3000.
 
@@ -66,7 +68,14 @@ npm.cmd run build
 
 ## Project organization
 
-Backend layers run `api/routes → services → graphs → agents → tools`, with `data`, `database`, `storage`, `reports`, `utils`, and `core` alongside. Frontend pages in `app/` compose `components/`, calling typed `services/` clients over a shared `store/`. See [docs/architecture.md](docs/architecture.md) for the dependency rules, [docs/agents.md](docs/agents.md) for the agent pipeline, and [docs/api.md](docs/api.md) for the endpoints.
+Backend layers run `api/routes → services → graphs → agents → tools`, with `data`, `database`, `storage`, `reports`, `utils`, and `core` alongside. Frontend pages in `app/` compose `components/`, calling typed `services/` clients over a shared `store/`.
+
+**Start with [docs/system-overview.md](docs/system-overview.md)** — a full walkthrough of the architecture, the technology used for each component, and the design decisions behind them. Then:
+
+- [docs/architecture.md](docs/architecture.md) — layer dependency rules
+- [docs/agents.md](docs/agents.md) — the five-agent pipeline
+- [docs/api.md](docs/api.md) — every endpoint
+- [docs/database.md](docs/database.md) — SQL sources
 
 ## Production roadmap
 
