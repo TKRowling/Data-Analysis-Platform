@@ -1,96 +1,131 @@
-"""Keyword routing used whenever the LLM planner is unavailable or produces an unusable plan.
+"""Deterministic keyword routing.
 
-This path keeps the platform fully functional with Ollama stopped. It is deliberately
-deterministic so it can be tested exactly.
+Used whenever the language agent is unavailable or produces an unusable plan. This path
+keeps the platform fully functional with Ollama stopped, so it is deliberately simple and
+exactly testable.
+
+All matching goes through ``mentions``/``resolve_column``, which are anchored on word
+boundaries. Substring matching silently mis-routes: "sum" fires inside "summary", "count"
+inside "country" and "discount", "id" inside "identify".
 """
 from __future__ import annotations
 
 import re
 
-from app.agents.base import INTENT_OWNERS, AnalysisPlan, PlanColumns
-from app.agents.column_resolver import mentioned_columns, resolve_column
+import pandas as pd
+
+from app.agents.base import PlanColumns
+from app.agents.column_resolver import mentioned_columns, mentions, resolve_column
+from app.agents.validation import validate_plan
 from app.utils.dataframe_utils import categorical_columns, numeric_columns
 
-METRIC_HINTS = ("revenue", "sale", "amount", "price", "value", "total", "income", "cost", "profit", "qty", "quantity")
-GROUP_HINTS = ("product", "category", "region", "segment", "type", "name", "channel", "country", "city", "status")
+METRIC_HINTS = ("revenue", "sales", "sale", "amount", "price", "value", "income",
+                "cost", "profit", "quantity", "qty", "total")
+GROUP_HINTS = ("product", "category", "region", "segment", "channel", "country",
+               "city", "status", "type", "name")
+
+COUNT_PHRASES = ("count", "how many", "number of")
+MEAN_PHRASES = ("average", "mean", "typical")
+SUM_PHRASES = ("sum", "total", "combined")
+
+# Checked in order. The first matching rule wins.
+PREDICT_WORDS = ("predict", "regression", "estimate")
+CLASSIFY_WORDS = ("classify", "classification", "churn")
+FORECAST_WORDS = ("forecast", "project", "projection", "future")
+CORRELATION_WORDS = ("correlation", "correlate", "correlated", "relationship", "related")
+OUTLIER_WORDS = ("outlier", "outliers", "anomaly", "anomalies", "unusual", "extreme")
+TREND_WORDS = ("trend", "over time", "trajectory")
+SEGMENT_WORDS = ("segment", "segments", "cohort", "cohorts", "cluster", "clusters", "breakdown")
+RANK_WORDS = ("top", "highest", "largest", "best", "bottom", "lowest", "worst", "rank")
+SPREAD_WORDS = ("distribution", "spread", "describe", "statistics", "histogram", "variance")
+OVERVIEW_WORDS = ("summary", "summarise", "summarize", "overview", "tell me about", "what is in")
+
+LIMIT = re.compile(r"(?:top|bottom|first|last)\s+(\d+)")
 
 
-def _features(question: str, numeric: list, target) -> list:
-    """Predictor columns the question names explicitly, else every other numeric column."""
-    named = [c for c in mentioned_columns(question, numeric) if c != target]
-    return named[:10] if named else [c for c in numeric if c != target][:5]
-
-
-def build_plan(record, question: str) -> AnalysisPlan:
+def build_plan(record, question: str):
+    """Classify a question with keywords alone and return a validated plan."""
     frame = record.frame
     q = question.lower()
     numeric = numeric_columns(frame)
-    categorical = categorical_columns(frame)
-    datetime_cols = [c for c in frame.columns if str(frame[c].dtype).startswith("datetime")]
+    categorical = [c for c in categorical_columns(frame)
+                   if not pd.api.types.is_datetime64_any_dtype(frame[c])]
+    temporal = [c for c in frame.columns if pd.api.types.is_datetime64_any_dtype(frame[c])]
 
-    def plan(intent: str, columns: PlanColumns, **kwargs) -> AnalysisPlan:
-        return AnalysisPlan(intent=intent, agent=INTENT_OWNERS.get(intent, "insight"),
-                            columns=columns, source="fallback", **kwargs)
+    def plan(intent: str, columns: PlanColumns, **kwargs):
+        return validate_plan(frame, intent, columns, source="fallback", **kwargs)
 
-    if any(word in q for word in ("predict", "regression", "estimate")) and "forecast" not in q:
+    def features_for(target):
+        named = [c for c in mentioned_columns(q, numeric) if c != target]
+        return named[:10]
+
+    # An explicit request for an overview must not be captured by the aggregation rule below.
+    if mentions(q, *OVERVIEW_WORDS) and not mentions(q, *SEGMENT_WORDS) and not mentions(q, *RANK_WORDS):
+        return plan("summary", PlanColumns())
+
+    if mentions(q, *PREDICT_WORDS) and not mentions(q, *FORECAST_WORDS):
         target = resolve_column(q, numeric, METRIC_HINTS)
         if target:
-            return plan("regression", PlanColumns(target=target, features=_features(q, numeric, target)))
+            return plan("regression", PlanColumns(target=target, features=features_for(target)))
 
-    if any(word in q for word in ("classify", "classification", "which class", "churn")):
+    if mentions(q, *CLASSIFY_WORDS):
         target = resolve_column(q, categorical, GROUP_HINTS)
         if target:
-            return plan("classification", PlanColumns(target=target, features=_features(q, numeric, target)))
+            return plan("classification", PlanColumns(target=target, features=features_for(target)))
 
-    if "forecast" in q or "project" in q or "next month" in q or "future" in q:
+    if mentions(q, *FORECAST_WORDS):
         metric = resolve_column(q, numeric, METRIC_HINTS)
         if metric:
-            return plan("forecast", PlanColumns(metric=metric, x=datetime_cols[0] if datetime_cols else None), chart="line")
+            return plan("forecast", PlanColumns(metric=metric, x=temporal[0] if temporal else None))
 
-    if "correlation" in q or "correlate" in q or "relationship" in q:
-        pair = [c for c in mentioned_columns(q, numeric)][:2]
+    if mentions(q, *CORRELATION_WORDS):
+        pair = mentioned_columns(q, numeric)[:2]
         if len(pair) == 2:
-            return plan("correlation", PlanColumns(x=pair[0], y=pair[1]), chart="scatter")
+            return plan("correlation", PlanColumns(x=pair[0], y=pair[1]))
         return plan("correlation", PlanColumns(), chart="heatmap")
 
-    if "outlier" in q or "anomal" in q or "unusual" in q:
+    if mentions(q, *OUTLIER_WORDS):
         metric = resolve_column(q, numeric, METRIC_HINTS)
         if metric:
-            return plan("outlier", PlanColumns(metric=metric), chart="box")
+            return plan("outlier", PlanColumns(metric=metric))
 
-    if "trend" in q or "over time" in q:
+    if mentions(q, *TREND_WORDS) and temporal:
         metric = resolve_column(q, numeric, METRIC_HINTS)
-        if metric and datetime_cols:
-            return plan("trend", PlanColumns(metric=metric, x=datetime_cols[0]), chart="line")
+        if metric:
+            return plan("trend", PlanColumns(metric=metric, x=temporal[0]))
 
-    if "segment" in q or "cohort" in q or "cluster" in q:
+    if mentions(q, *SEGMENT_WORDS):
         group = resolve_column(q, categorical, GROUP_HINTS)
-        metric = resolve_column(q, numeric, METRIC_HINTS)
         if group:
-            return plan("segmentation", PlanColumns(group=group, metric=metric), chart="bar")
+            return plan("segmentation", PlanColumns(group=group,
+                                                    metric=resolve_column(q, numeric, METRIC_HINTS)))
 
-    if any(word in q for word in ("top ", "highest", "largest", "best", "bottom", "lowest", "worst")):
-        match = re.search(r"(?:top|bottom|first|last)\s+(\d+)", q)
+    if mentions(q, *RANK_WORDS):
+        match = LIMIT.search(q)
         limit = min(int(match.group(1)), 50) if match else 5
         metric = resolve_column(q, numeric, METRIC_HINTS)
         group = resolve_column(q, categorical, GROUP_HINTS)
         if metric and group:
-            return plan("ranking", PlanColumns(group=group, metric=metric), operation="sum", limit=limit, chart="bar")
+            return plan("ranking", PlanColumns(group=group, metric=metric),
+                        operation="sum", limit=limit)
 
-    if any(word in q for word in ("average", "mean", "sum", "total", "count", "how many", "median")):
-        if "average" in q or "mean" in q: operation = "mean"
-        elif "median" in q: operation = "median"
-        elif "count" in q or "how many" in q: operation = "count"
-        else: operation = "sum"
+    if mentions(q, *MEAN_PHRASES, *SUM_PHRASES, *COUNT_PHRASES, "median"):
+        if mentions(q, *MEAN_PHRASES):
+            operation = "mean"
+        elif mentions(q, "median"):
+            operation = "median"
+        elif mentions(q, *COUNT_PHRASES):
+            operation = "count"
+        else:
+            operation = "sum"
         metric = resolve_column(q, numeric, METRIC_HINTS)
-        group = next((c for c in mentioned_columns(q, categorical)), None)
+        group = next(iter(mentioned_columns(q, categorical)), None)
         if metric:
-            return plan("aggregation", PlanColumns(metric=metric, group=group), operation=operation,
-                        chart="bar" if group else None)
+            return plan("aggregation", PlanColumns(metric=metric, group=group), operation=operation)
 
-    if any(word in q for word in ("distribution", "spread", "describe", "statistics", "summary of")):
+    if mentions(q, *SPREAD_WORDS):
         metric = resolve_column(q, numeric, METRIC_HINTS)
         if metric:
-            return plan("descriptive", PlanColumns(metric=metric), chart="histogram")
+            return plan("descriptive", PlanColumns(metric=metric))
 
     return plan("summary", PlanColumns())

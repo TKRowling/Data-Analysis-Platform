@@ -14,7 +14,7 @@ from app.tools.distribution import categorical_distribution, numeric_distributio
 from app.tools.quality import datatype_issues, duplicate_summary, iqr_outliers, missing_summary
 from app.utils.dataframe_utils import column_kind, finite, finite_series, json_records
 
-STRONG_CORRELATION = 0.7
+from app.tools.correlation.thresholds import STRONG as STRONG_CORRELATION
 
 __all__ = ["overview", "statistics", "quality", "correlation", "distribution", "column_kind", "finite"]
 

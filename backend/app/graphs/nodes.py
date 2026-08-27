@@ -1,60 +1,79 @@
-"""The four stages of an AI analysis: understand, delegate, compute, narrate."""
+"""The multi-agent analysis graph, built with LangGraph.
+
+    START
+      |
+    understand        natural language agent reads the question -> AnalysisPlan
+      |
+    delegate          announces the hand-off
+      |
+      +--- conditional on plan.agent ---+
+      |            |          |         |
+ statistical   pattern   predictive  insight        (one specialist computes)
+      |            |          |         |
+      +--- conditional on error --------+
+      |                                 |
+   recover  ------------------------> narrate       (insight agent phrases the result)
+                                        |
+                                       END
+
+The graph is linear per request but genuinely branching: the specialist chosen depends on
+the plan, and a specialist that cannot run its plan is routed to ``recover`` rather than
+failing the request. Adding a sixth agent means adding a Skill, a node, and one entry in
+the conditional map — no other file changes.
+"""
 from __future__ import annotations
 
-import logging
+from langgraph.graph import END, START, StateGraph
 
-from app.core.exceptions import AnalysisError
-from app.graphs.routing import label, select
+from app.agents.base import AgentResult
+from app.agents.language_agent import LanguageAgent
+from app.agents.registry import AGENTS, build_agents
+from app.graphs.nodes import SPECIALIST_NODES, after_compute, build_nodes, choose_specialist
 from app.graphs.state import AnalysisState
 
-logger = logging.getLogger(__name__)
+
+class AnalysisGraph:
+    """Compiles and runs the agent graph for one dataset question."""
+
+    def __init__(self, language_agent: LanguageAgent | None = None, client=None,
+                 agents: dict | None = None):
+        self.language_agent = language_agent or LanguageAgent(client=client)
+        self.agents = agents or AGENTS
+        self.compiled = self._compile()
+
+    def _compile(self):
+        nodes = build_nodes(self.language_agent, self.agents)
+        builder = StateGraph(AnalysisState)
+
+        for name, node in nodes.items():
+            builder.add_node(name, node)
+
+        builder.add_edge(START, "understand")
+        builder.add_edge("understand", "delegate")
+        builder.add_conditional_edges(
+            "delegate", choose_specialist, {key: key for key in SPECIALIST_NODES})
+
+        for key in SPECIALIST_NODES:
+            builder.add_conditional_edges(
+                key, after_compute, {"recover": "recover", "narrate": "narrate"})
+
+        builder.add_edge("recover", "narrate")
+        builder.add_edge("narrate", END)
+        return builder.compile()
+
+    def run(self, record, question: str) -> AgentResult:
+        final = self.compiled.invoke({"record": record, "question": question, "trace": []})
+        result: AgentResult = final["result"]
+        # Number the steps at the end so the UI does not depend on node execution order.
+        result.trace = [{**entry, "step": index}
+                        for index, entry in enumerate(final.get("trace", []), start=1)]
+        return result
+
+    def mermaid(self) -> str:
+        """Diagram source for the docs. Useful when the graph grows past four specialists."""
+        return self.compiled.get_graph().draw_mermaid()
 
 
-def understand(state: AnalysisState, orchestrator) -> AnalysisState:
-    """Turn the question into a validated routing plan."""
-    state.plan = orchestrator.plan(state.record, state.question)
-    source = "language model" if state.plan.source == "llm" else "keyword routing"
-    state.log("understand", "orchestrator_agent",
-              f"Interpreted the question as '{state.plan.intent}' using {source}.")
-    return state
-
-
-def delegate(state: AnalysisState, orchestrator) -> AnalysisState:
-    """Pick the specialist that owns the plan's intent."""
-    state.plan.agent = select(state.plan)
-    columns = ", ".join(state.plan.named_columns()) or "no specific columns"
-    state.log("delegate", "orchestrator_agent",
-              f"Delegated to the {label(state.plan.agent)} with {columns}.")
-    return state
-
-
-def compute(state: AnalysisState, orchestrator) -> AnalysisState:
-    """Run the specialist. Every figure in the result originates here, from pandas."""
-    try:
-        state.result = orchestrator.dispatch(state.record, state.plan)
-    except AnalysisError:
-        # The specialist could not work with this plan - fall back to a dataset summary
-        # rather than failing the request outright.
-        if state.plan.intent == "summary":
-            raise
-        state.log("compute", f"{state.plan.agent}_agent",
-                  "Could not complete that analysis; answering with a dataset summary instead.")
-        state.plan.intent, state.plan.agent = "summary", "insight"
-        state.result = orchestrator.insight.run(state.record, state.plan)
-        return state
-    state.log("compute", state.result.agent, f"Computed the {state.result.intent} result with pandas.")
-    return state
-
-
-def narrate(state: AnalysisState, orchestrator) -> AnalysisState:
-    """Let the insight agent phrase the verified numbers, if a model is available."""
-    before = state.result.answer
-    state.result = orchestrator.insight.narrate(state.result, state.question, orchestrator.client)
-    if state.result.narration_source == "llm":
-        state.log("narrate", "insight_agent", "Explained the verified figures using the language model.")
-    elif before:
-        state.log("narrate", "insight_agent", "Used the deterministic explanation.")
-    return state
-
-
-PIPELINE = (understand, delegate, compute, narrate)
+def fresh_graph(client=None) -> AnalysisGraph:
+    """A graph with its own agent instances — handy in tests to avoid shared state."""
+    return AnalysisGraph(client=client, agents=build_agents())

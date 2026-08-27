@@ -1,4 +1,5 @@
 import pandas as pd
+from app.tools.correlation.thresholds import strength
 
 def pair_relationship(frame: pd.DataFrame, left: str, right: str, method: str = "pearson") -> dict:
     value=float(frame[left].corr(frame[right], method=method))
