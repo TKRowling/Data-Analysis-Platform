@@ -1,4 +1,26 @@
+"""The multi-agent analysis graph, built with LangGraph.
 
+    START
+      |
+    understand        natural language agent reads the question -> AnalysisPlan
+      |
+    delegate          announces the hand-off
+      |
+      +--- conditional on plan.agent ---+
+      |            |          |         |
+ statistical   pattern   predictive  insight        (one specialist computes)
+      |            |          |         |
+      +--- conditional on error --------+
+      |                                 |
+   recover  ------------------------> narrate       (insight agent phrases the result)
+                                        |
+                                       END
+
+The graph is linear per request but genuinely branching: the specialist chosen depends on
+the plan, and a specialist that cannot run its plan is routed to ``recover`` rather than
+failing the request. Adding a sixth agent means adding a Skill, a node, and one entry in
+the conditional map — no other file changes.
+"""
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
