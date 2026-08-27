@@ -140,7 +140,7 @@ def test_statistical_figures_match_pandas(rich_record):
 def test_unrunnable_plan_recovers_instead_of_500(rich_record):
     """The conditional edge to `recover` keeps a bad plan from failing the request."""
     agent = LanguageAgent(client=None)
-    agent.plan = lambda record, question: AnalysisPlan(
+    agent.plan = lambda record, question, history=None: AnalysisPlan(
         intent="ranking", agent="statistical", columns=PlanColumns())
     result = AnalysisGraph(language_agent=agent).run(rich_record, "unanswerable ranking")
     assert result.intent == "summary"

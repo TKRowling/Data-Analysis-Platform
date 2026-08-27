@@ -75,20 +75,30 @@ wiring in `graphs/graph.py`, the state in `graphs/state.py`.
    If the summary itself was what failed, it re-raises and the API returns 422.
 5. **narrate** — the insight agent offers the verified numbers to the model for rephrasing.
    If the model is off, or its sentence fails the grounding check, the deterministic
-   sentence stands.
+   sentence stands. Being the last node, this is also where the exchange is committed to
+   conversation memory.
 
-State is a `TypedDict` where `trace` carries an additive reducer, so each node appends its
-own step without reading what came before:
+State is a `TypedDict` with two additive channels that mean different things — `trace` is
+scratch for one question, `turns` is memory across questions:
 
 ```python
 class AnalysisState(TypedDict, total=False):
-    record: Any                 # DatasetRecord — carries the live dataframe
     question: str
+
+    # Scratch — replaced on every question
     plan: AnalysisPlan
     result: AgentResult
-    error: str                  # set by a specialist that could not run its plan
-    trace: Annotated[list[dict], operator.add]
+    error: str                            # set by a specialist that could not run its plan
+    trace: Annotated[list[dict], append_steps]
+
+    # Conversation memory — survives across questions on the same thread
+    turns: Annotated[list[Turn], remember]
 ```
+
+The live dataframe is deliberately **not** in the state. Every channel is serialized into
+the checkpoint after each node, and a DataFrame is not msgpack-serializable at all — nor
+would we want a copy of it per superstep. It travels in the run config instead, read by
+`state.dataset_of(config)`.
 
 ## The shared contract
 
@@ -184,7 +194,7 @@ inherit. `OrchestratorAgent` remains as a backwards-compatible alias.
 
 | | |
 |---|---|
-| **Input** | `plan(record, question: str)` |
+| **Input** | `plan(record, question: str, history=None)` — `history` is the recent `Turn` list from conversation memory |
 | **Output** | `AnalysisPlan` — always validated, always runnable. Never raises. |
 | **Tools** | `describe_columns`, `skill_menu`, `parse_structured`, `validate_plan`, `is_runnable`, `build_plan` |
 
@@ -219,10 +229,10 @@ skill's required slots survived.
 The whole fallback policy is nine lines:
 
 ```python
-def plan(self, record, question: str) -> AnalysisPlan:
+def plan(self, record, question: str, history=None) -> AnalysisPlan:
     if self.client is not None:
         try:
-            proposed = self._llm_plan(record, question)
+            proposed = self._llm_plan(record, question, history)
             if is_runnable(proposed):
                 return proposed
             logger.info("LLM plan for %r was not runnable (rejected: %s)", question, proposed.rejected)
@@ -489,6 +499,58 @@ result untouched, with `narration_source` still reading `"template"`.
 
 ---
 
+## Conversation memory
+
+`graphs/memory.py` supplies a LangGraph checkpointer, so the graph persists one *thread* of
+state per conversation. Memory is nothing more exotic than: give a run a thread id, and the
+`turns` channel from last time is still there when it starts.
+
+```python
+def build_checkpointer() -> InMemorySaver:
+    return InMemorySaver(serde=JsonPlusSerializer(allowed_msgpack_modules=ALLOWED_TYPES))
+```
+
+`ALLOWED_TYPES` registers `AnalysisPlan` and `AgentResult` with the serializer. Without it
+LangGraph still deserializes them, but warns that it will refuse outright in a later release.
+
+### What is remembered
+
+The `narrate` node is the last one to run, so it is where a question becomes something the
+next question can refer back to. It appends one `Turn` — question, intent, agent, and the
+answer sentence. The computed payload is never stored: it can be megabytes and is
+meaningless out of context.
+
+`state.remember` bounds the list to `MEMORY_TURNS` (6); `nodes.HISTORY_IN_PROMPT` (3) caps
+how many of those the planner is actually shown.
+
+### Who reads it
+
+`understand` passes the recent turns to `LanguageAgent.plan(record, question, history=...)`,
+which renders them into the prompt above the question. This is the *only* consumer — the
+keyword fallback stays context-free, so a question routed without a model is planned
+identically whether or not it is a follow-up. Rule 8 of `llm/prompts/orchestrator.md` tells
+the model to use the block only for resolving what the current question leaves implicit.
+
+### Thread scope
+
+| Caller | Thread | Effect |
+|---|---|---|
+| `AnalysisGraph.run(record, question)` | a throwaway `once-<uuid>` | nothing is remembered — the pre-conversation contract |
+| `AnalysisGraph.run(..., thread_id="x")` | `"x"` | continues conversation `x` |
+| `POST .../ai-analysis` | the dataset id | two questions about one dataset are a conversation |
+| `POST .../ai-analysis` with `conversation_id` | that id | explicit scoping |
+
+`GET /api/datasets/{id}/ai-analysis/memory` returns the stored turns and
+`DELETE` on the same path clears them. Both accept an optional `conversation_id` query
+parameter.
+
+Two limits worth knowing before this goes anywhere real. The store is in-process, so it dies
+with the server — the same lifetime as `DatasetStore`, whose dataframes the turns refer to.
+And the default per-dataset thread is shared by every caller, which is fine for the
+single-process MVP but means a multi-user deployment must pass an explicit
+`conversation_id`. Swapping `InMemorySaver` for a SQLite or Postgres saver is a one-line
+change in `build_checkpointer` and touches no node.
+
 ## The tools the agents call
 
 Agents hold no maths of their own. Everything lives under `app/tools/` as plain functions
@@ -546,7 +608,8 @@ configured:
 | `delegate` | Writes one trace entry naming the specialist and the columns. | trace: 2 steps |
 | `statistical` | `aggregate(frame, "sales", "sum", "product").nlargest(5, "sales")`, then the share calculation. | result set |
 | ↳ | `after_compute` sees no error. | → narrate |
-| `narrate` | `client is None` → returns the result untouched. | narration_source = template |
+| `narrate` | `client is None` → returns the result untouched, then appends the exchange to `turns`. | narration_source = template |
+| ↳ | The thread is the dataset id, so the next question about this dataset sees this one. | 1 turn remembered |
 
 The trace array the UI renders as the hand-off trail, numbered at the end so it never
 depends on node execution order:

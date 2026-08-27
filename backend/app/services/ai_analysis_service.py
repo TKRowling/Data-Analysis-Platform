@@ -15,7 +15,7 @@ from app.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["analyze", "resolve_column", "llm_status", "agents"]
+__all__ = ["analyze", "resolve_column", "llm_status", "agents", "memory", "forget"]
 
 _graph: AnalysisGraph | None = None
 
@@ -35,8 +35,30 @@ def _analysis_graph() -> AnalysisGraph:
     return _graph
 
 
-def analyze(record, question: str) -> dict:
-    return _analysis_graph().run(record, question).to_dict()
+def _thread_for(record, conversation_id: str | None) -> str:
+    """Which conversation this question belongs to.
+
+    Defaults to the dataset: ask two questions about the same data and the second one
+    can refer back to the first, with no client change needed. Pass an explicit
+    conversation_id to scope memory more narrowly — which is what a multi-user
+    deployment must do, since a per-dataset thread is shared by every caller.
+    """
+    return conversation_id or record.id
+
+
+def analyze(record, question: str, conversation_id: str | None = None) -> dict:
+    thread_id = _thread_for(record, conversation_id)
+    return _analysis_graph().run(record, question, thread_id=thread_id).to_dict()
+
+
+def memory(record, conversation_id: str | None = None) -> list[dict]:
+    """The exchanges this conversation still remembers, oldest first."""
+    return _analysis_graph().history(_thread_for(record, conversation_id))
+
+
+def forget(record, conversation_id: str | None = None) -> None:
+    """Drop the conversation. The next question starts with no context."""
+    _analysis_graph().forget(_thread_for(record, conversation_id))
 
 
 def agents() -> list[dict]:

@@ -52,6 +52,10 @@ Reply with ONLY a JSON object. No prose. No code fences.
    "how many" or "number of" means count.
 6. `limit` is how many rows a ranking should return. "Top 5" means 5. Default 5.
 7. When the question is vague, conversational, or asks for an overview, choose `summary`.
+8. An **Earlier in this conversation** block may appear before the question. Use it only to
+   resolve what the current question leaves implicit — "what about by region?", "same for
+   revenue", "show me the top 10 instead". The current question always wins: never repeat a
+   past intent just because it is listed, and never answer a previous question again.
 
 ## Worked examples
 

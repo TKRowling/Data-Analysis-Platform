@@ -37,6 +37,8 @@ class ChartRequest(BaseModel):
 
 class AIQuestion(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
+    # Which conversation this belongs to. Omit to use the dataset as the thread.
+    conversation_id: str | None = Field(default=None, max_length=200)
 
 
 class ReportRequest(BaseModel):

@@ -1,7 +1,9 @@
 """The nodes of the analysis graph, and the two functions that route between them.
 
-A node takes the state and returns a *partial* update. ``trace`` is additive (see
-``state.py``), so a node appends its own step without reading the existing list.
+A node takes the state plus the run config and returns a *partial* update. ``trace`` is
+additive (see ``state.py``), so a node appends its own step without reading the existing
+list. The dataframe comes from the config rather than the state, because state is
+checkpointed and a dataframe cannot be.
 
 The specialists are built from the agent registry rather than listed by hand: adding a
 fifth agent means adding it to ``build_agents`` — the node, the conditional edge, and the
@@ -15,7 +17,7 @@ from app.agents.base import Agent
 from app.agents.language_agent import LanguageAgent
 from app.agents.registry import AGENTS
 from app.core.exceptions import AnalysisError
-from app.graphs.state import AnalysisState, step
+from app.graphs.state import AnalysisState, Turn, dataset_of, step
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,9 @@ SPECIALIST_NODES: tuple[str, ...] = tuple(AGENTS)
 
 # The specialist that answers when a plan cannot be run as written.
 FALLBACK_NODE = "insight"
+
+# How many past exchanges the planner is shown. The state keeps more than the prompt uses.
+HISTORY_IN_PROMPT = 3
 
 
 def label(agents: dict[str, Agent], key: str) -> str:
@@ -52,15 +57,19 @@ def build_nodes(language_agent: LanguageAgent, agents: dict[str, Agent]) -> dict
     """Every node of the graph, keyed by node name, bound to these agent instances."""
     insight = agents[FALLBACK_NODE]
 
-    def understand(state: AnalysisState) -> AnalysisState:
+    def understand(state: AnalysisState, config) -> AnalysisState:
         """Turn the question into a validated, runnable plan."""
-        plan = language_agent.plan(state["record"], state["question"])
+        record = dataset_of(config)
+        recent = (state.get("turns") or [])[-HISTORY_IN_PROMPT:]
+        plan = language_agent.plan(record, state["question"], history=recent)
         source = "language model" if plan.source == "llm" else "keyword routing"
+        detail = f"Interpreted the question as '{plan.intent}' using {source}."
+        if recent and plan.source == "llm":
+            detail += f" {len(recent)} earlier exchange(s) were in view."
         return {"plan": plan,
-                "trace": [step("understand", language_agent.name,
-                               f"Interpreted the question as '{plan.intent}' using {source}.")]}
+                "trace": [step("understand", language_agent.name, detail)]}
 
-    def delegate(state: AnalysisState) -> AnalysisState:
+    def delegate(state: AnalysisState, config) -> AnalysisState:
         """Announce the hand-off. The plan already names its owning specialist."""
         plan = state["plan"]
         columns = ", ".join(plan.named_columns()) or "no specific columns"
@@ -70,9 +79,9 @@ def build_nodes(language_agent: LanguageAgent, agents: dict[str, Agent]) -> dict
     def specialist(key: str, agent: Agent):
         """One computing node. Every figure in the result originates here, from pandas."""
 
-        def node(state: AnalysisState) -> AnalysisState:
+        def node(state: AnalysisState, config) -> AnalysisState:
             try:
-                result = agent.run(state["record"], state["plan"])
+                result = agent.run(dataset_of(config), state["plan"])
             except AnalysisError as exc:
                 # Not fatal: ``after_compute`` routes to ``recover`` instead of failing
                 # the request outright.
@@ -86,7 +95,7 @@ def build_nodes(language_agent: LanguageAgent, agents: dict[str, Agent]) -> dict
         node.__name__ = f"{key}_node"
         return node
 
-    def recover(state: AnalysisState) -> AnalysisState:
+    def recover(state: AnalysisState, config) -> AnalysisState:
         """Answer with a dataset summary when the planned analysis could not run."""
         plan = state["plan"]
         if plan.intent == "summary":
@@ -94,7 +103,7 @@ def build_nodes(language_agent: LanguageAgent, agents: dict[str, Agent]) -> dict
             # specialist's own message is more useful than an empty summary.
             raise AnalysisError(state.get("error") or "The analysis could not be completed")
         plan.intent, plan.agent = "summary", FALLBACK_NODE
-        result = insight.run(state["record"], plan)
+        result = insight.run(dataset_of(config), plan)
         result.caveats.append("The requested analysis could not be run on this dataset; "
                               "this is a general summary instead.")
         return {"result": result, "error": "",
@@ -102,12 +111,20 @@ def build_nodes(language_agent: LanguageAgent, agents: dict[str, Agent]) -> dict
                                "Could not complete that analysis; answered with a dataset "
                                "summary instead.")]}
 
-    def narrate(state: AnalysisState) -> AnalysisState:
-        """Let the insight agent phrase the verified numbers, if a model is available."""
+    def narrate(state: AnalysisState, config) -> AnalysisState:
+        """Phrase the verified numbers, then commit the exchange to memory.
+
+        This is the last node, so it is where a question becomes something the next
+        question can refer back to. Only the shape of the exchange is kept — never the
+        computed payload, which can be megabytes and is meaningless out of context.
+        """
         result = insight.narrate(state["result"], state["question"], language_agent.client)
         detail = ("Explained the verified figures using the language model."
                   if result.narration_source == "llm" else "Used the deterministic explanation.")
-        return {"result": result, "trace": [step("narrate", insight.name, detail)]}
+        turn = Turn(question=state["question"], intent=result.intent,
+                    agent=result.agent, answer=result.answer)
+        return {"result": result, "turns": [turn],
+                "trace": [step("narrate", insight.name, detail)]}
 
     nodes = {"understand": understand, "delegate": delegate}
     nodes.update({key: specialist(key, agent) for key, agent in agents.items()})

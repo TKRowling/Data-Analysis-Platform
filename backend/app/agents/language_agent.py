@@ -25,6 +25,21 @@ from app.llm.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
+# Kept short on purpose: the history exists to resolve a pronoun or an omitted column,
+# not to let the model re-answer an old question.
+MAX_REMEMBERED_ANSWER = 160
+
+
+def _recent(history) -> str:
+    """Render past exchanges for the prompt. Empty string when there are none."""
+    if not history:
+        return ""
+    lines = [f"- asked \"{turn['question']}\" -> {turn['intent']}: "
+             f"{turn['answer'][:MAX_REMEMBERED_ANSWER]}"
+             for turn in history]
+    return ("Earlier in this conversation (oldest first):\n"
+            + "\n".join(lines) + "\n\n")
+
 
 class LLMPlan(BaseModel):
     """What the planner model is asked to return. Lenient here; validated afterwards."""
@@ -71,10 +86,16 @@ class LanguageAgent:
     def __init__(self, client=None):
         self.client = client
 
-    def plan(self, record, question: str) -> AnalysisPlan:
+    def plan(self, record, question: str, history=None) -> AnalysisPlan:
+        """Route a question, optionally in the context of earlier exchanges.
+
+        ``history`` is a list of past ``Turn`` dicts from the conversation memory. It
+        only ever reaches the model — the keyword fallback stays context-free, so a
+        question that lands there is routed identically whether or not it is a follow-up.
+        """
         if self.client is not None:
             try:
-                proposed = self._llm_plan(record, question)
+                proposed = self._llm_plan(record, question, history)
                 if is_runnable(proposed):
                     return proposed
                 logger.info("LLM plan for %r was not runnable (rejected: %s); using keyword routing",
@@ -83,7 +104,7 @@ class LanguageAgent:
                 logger.info("LLM planning unavailable (%s); using keyword routing", exc)
         return build_plan(record, question)
 
-    def _llm_plan(self, record, question: str) -> AnalysisPlan:
+    def _llm_plan(self, record, question: str, history=None) -> AnalysisPlan:
         from app.llm.structured_output import parse_structured
 
         described = describe_columns(record.frame)
@@ -92,6 +113,7 @@ class LanguageAgent:
             f"Dataset columns ({described['total']} total"
             f"{', truncated to the most relevant' if described['truncated'] else ''}):\n"
             f"{json.dumps(described['columns'])}\n\n"
+            f"{_recent(history)}"
             f"Question: {question}\n\n"
             "Return the routing plan as JSON."
         )
